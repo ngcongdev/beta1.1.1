@@ -39,26 +39,8 @@ jobs:
           echo 'void proc_self(void) {}' >> "$STUB_FILE"
           echo 'void sandbox_escape(void) {}' >> "$STUB_FILE"
 
-          # Nạp bản dịch tiếng Việt sang binary strings
-          cat << 'EOF' > translations.json
-          {
-            "COMMON.DEVICE": "THIẾT BỊ",
-            "dashboard.hardware_model": "Mẫu máy",
-            "settings.ios_version": "Phiên bản iOS",
-            "settings.compatibility": "Tương thích",
-            "settings.supported": "Được hỗ trợ",
-            "settings.supported_range_summary": "Hỗ trợ iOS 15.0 - 16.7.10",
-            "DASHBOARD.FEATURES": "TÍNH NĂNG",
-            "tab.cleaner": "Dọn dẹp rác",
-            "tab.wallpapers": "Hình nền",
-            "dashboard.features_footer": "Các công cụ tối ưu hệ thống",
-            "DASHBOARD.INSTALLATION": "CÀI ĐẶT",
-            "dashboard.enterprise_signing": "Chứng chỉ doanh nghiệp",
-            "tab.home": "Trang chủ",
-            "tab.files": "Tệp tin",
-            "tab.patches": "Bản vá"
-          }
-EOF
+          # Tạo file JSON không dùng heredoc EOF để tránh lỗi YAML Indentation
+          echo '{"COMMON.DEVICE":"THIẾT BỊ","dashboard.hardware_model":"Mẫu máy","settings.ios_version":"Phiên bản iOS","settings.compatibility":"Tương thích","settings.supported":"Được hỗ trợ","settings.supported_range_summary":"Hỗ trợ iOS 15.0 - 16.7.10","DASHBOARD.FEATURES":"TÍNH NĂNG","tab.cleaner":"Dọn dẹp rác","tab.wallpapers":"Hình nền","dashboard.features_footer":"Các công cụ tối ưu hệ thống","DASHBOARD.INSTALLATION":"CÀI ĐẶT","dashboard.enterprise_signing":"Chứng chỉ doanh nghiệp","tab.home":"Trang chủ","tab.files":"Tệp tin","tab.patches":"Bản vá"}' > translations.json
 
           find . -name "*.strings" | while read -r file; do
             plutil -convert binary1 translations.json -o "$file"
