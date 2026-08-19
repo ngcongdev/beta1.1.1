@@ -13,8 +13,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Patch Headers, Stubs, Localization & OnboardingView
+      - name: Restore Source & Patch Headers
         run: |
+          # Khôi phục lại trạng thái file gốc của dự án
+          git checkout -- ThreeOneOSFive/helpers/Localization.swift 2>/dev/null || true
+          git checkout -- ThreeOneOSFive/views/OnboardingView.swift 2>/dev/null || true
+
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
           
@@ -36,87 +40,6 @@ jobs:
             echo '/* Localizable Strings */' > "ThreeOneOSFive/${lang}.lproj/Localizable.strings"
             echo '/* Localizable Strings */' > "${lang}.lproj/Localizable.strings"
           done
-
-          # Cập nhật Localization.swift
-          python3 -c '
-          import os
-          path = "ThreeOneOSFive/helpers/Localization.swift"
-          swift_code = """import SwiftUI
-
-          enum AppLanguage: String, CaseIterable, Identifiable, Hashable {
-              case english = "en"
-              case vietnamese = "vi"
-              case simplifiedChinese = "zh-Hans"
-
-              var id: String { rawValue }
-
-              var languageCode: String {
-                  switch self {
-                  case .english:
-                      return "en"
-                  case .vietnamese:
-                      return "vi"
-                  case .simplifiedChinese:
-                      return "zh-Hans"
-                  }
-              }
-
-              var displayName: String {
-                  switch self {
-                  case .english:
-                      return "English"
-                  case .vietnamese:
-                      return "Tiếng Việt"
-                  case .simplifiedChinese:
-                      return "简体中文"
-                  }
-              }
-
-              func text(_ key: String, _ args: CVarArg...) -> String {
-                  let format: String
-                  if let path = Bundle.main.path(forResource: languageCode, ofType: "lproj"),
-                     let bundle = Bundle(path: path) {
-                      format = NSLocalizedString(key, bundle: bundle, comment: "")
-                  } else {
-                      format = NSLocalizedString(key, comment: "")
-                  }
-                  if args.isEmpty {
-                      return format
-                  }
-                  return String(format: format, arguments: args)
-              }
-          }
-
-          private struct AppLanguageKey: EnvironmentKey {
-              static let defaultValue: AppLanguage = .english
-          }
-
-          extension EnvironmentValues {
-              var appLanguage: AppLanguage {
-                  get { self[AppLanguageKey.self] }
-                  set { self[AppLanguageKey.self] = newValue }
-              }
-          }
-          """
-          with open(path, "w") as f:
-              f.write(swift_code)
-          '
-
-          # Khôi phục/Sửa OnboardingView.swift chuẩn hóa ForEach
-          python3 -c '
-          import os
-          path = "ThreeOneOSFive/views/OnboardingView.swift"
-          if os.path.exists(path):
-              with open(path, "r") as f:
-                  content = f.read()
-              
-              # Sửa các chuỗi bị lặp do patch trước
-              content = content.replace("ForEach(AppLanguage.allCases, id: \\.self)", "ForEach(AppLanguage.allCases, id: \\.rawValue)")
-              content = content.replace("Text(option.displayName as String)", "Text(option.displayName)")
-              
-              with open(path, "w") as f:
-                  f.write(content)
-          '
 
           # Sửa file project .xcodeproj
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
