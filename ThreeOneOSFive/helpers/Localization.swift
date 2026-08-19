@@ -14,7 +14,7 @@ enum AppLanguage: String, CaseIterable, Identifiable {
         switch self {
         case .vietnamese: return "Tiếng Việt"
         default:
-             return "en"
+           
         }
     }
 
