@@ -10,7 +10,7 @@ jobs:
     runs-on: macos-14
 
     steps: 
-      - name: Checkout code
+      - name: Checkout code 
         uses: actions/checkout@v4
 
       - name: Patch Missing Headers & Stubs
