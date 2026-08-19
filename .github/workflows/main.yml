@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Patch Missing Headers & Setup Strings
+      - name: Patch Missing Headers & Setup Valid Strings
         run: |
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
@@ -29,15 +29,49 @@ jobs:
           #endif
           EOF
 
-          # Tạo file tiếng Việt tạm thời bằng base64 để tránh lỗi ký tự YAML
-          echo "IkNPTU1PTi5ERVZJQ0UiID0gIlRISIogQuG7iiI7CiJkYXNoYm9hcmQuaGFyZHdhcmVfbW9kZWwiID0gIk3huqt1IG3DoXkiOwIic2V0dGluZ3MuaW9zX3ZlcnNpb24iID0gIlBoaMOqbiBi4bqjbiBpT1MiOwIic2V0dGluZ3MuY29tcGF0aWJpbGl0eSIgPSAiVMawxqA5ZyB0aMOtY2giOwIic2V0dGluZ3Muc3VwcG9ydGVkIiA0ICJEQsC3YyBo4buXIHRy4buXIjsKInNldHRpbmdzLnN1cHBvcnRlZF9yYW5nZV9zdW1tYXJ5IiA9ICJI4buXIHRy4buZaU9TIDE1LjAgLSAxNi43LjEwIjsKCiJEQVNIQk9BUkQuRkVBVFVSRVMiID0gIlTINkNIIE7EgE5HIjsKInRhYi5jbGVhbmVyIiA9ICJE4buNbiBk4bqĐcCByw4FjIjsKInRhYi53YWxscGFwZXJzIiA9ICJIIO2uaCBu4buBbiI7CiJkYXNoYm9hcmQuZmVhdHVyZXNfZm9vdGVyIiA9ICJDw4FjIGPDtG5nIGPhuqV1IHThu5FpIMawdSBo4buHIHRoxJFuZ3MiOwoKIkRBU0hCT0FSRC5JTlNUQUxMQVRJT04iID0gIkPDgEkgxJDhurpUIjsKImRhc2hib2FyZC5lbnRlcnByaXNlX3NpZ25pbmciID0gIkNo4bupbmcgY2jhu4kgZG9hbmggbmdoaeG7gnAiOwoKInRhYi5ob21lIiA9ICJUcmFuZyBjaOG7pyI7CiJ0YWIuZmlsZXMiID0gIlThu4dwIHRpbiI7CiJ0YWIucGF0Y2hlcyIgPSAiQuG6o24gdsOhIjs=" > strings.b64
-
-          find . -name "*.lproj" -type d | while read -r dir; do
-            STR_FILE="$dir/Localizable.strings"
-            printf "\xFF\xFE" > "$STR_FILE"
-            base64 -d strings.b64 | iconv -f UTF-8 -t UTF-16LE >> "$STR_FILE" 2>/dev/null || true
+          # Ghi đè tất cả các file .strings bằng định dạng Binary Plist hợp lệ 100%
+          find . -name "*.strings" | while read -r file; do
+            cat << 'EOF' > "$file.plist"
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>COMMON.DEVICE</key>
+              <string>THIẾT BỊ</string>
+              <key>dashboard.hardware_model</key>
+              <string>Mẫu máy</string>
+              <key>settings.ios_version</key>
+              <string>Phiên bản iOS</string>
+              <key>settings.compatibility</key>
+              <string>Tương thích</string>
+              <key>settings.supported</key>
+              <string>Được hỗ trợ</string>
+              <key>settings.supported_range_summary</key>
+              <string>Hỗ trợ iOS 15.0 - 16.7.10</string>
+              <key>DASHBOARD.FEATURES</key>
+              <string>TÍNH NĂNG</string>
+              <key>tab.cleaner</key>
+              <string>Dọn dẹp rác</string>
+              <key>tab.wallpapers</key>
+              <string>Hình nền</string>
+              <key>dashboard.features_footer</key>
+              <string>Các công cụ tối ưu hệ thống</string>
+              <key>DASHBOARD.INSTALLATION</key>
+              <string>CÀI ĐẶT</string>
+              <key>dashboard.enterprise_signing</key>
+              <string>Chứng chỉ doanh nghiệp</string>
+              <key>tab.home</key>
+              <string>Trang chủ</string>
+              <key>tab.files</key>
+              <string>Tệp tin</string>
+              <key>tab.patches</key>
+              <string>Bản vá</string>
+          </dict>
+          </plist>
+EOF
+            plutil -convert binary1 "$file.plist" -o "$file"
+            rm -f "$file.plist"
           done
-          rm -f strings.b64
 
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
           ruby -r xcodeproj -e "
