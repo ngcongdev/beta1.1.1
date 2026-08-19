@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Headers & C Stubs
+      - name: Setup Headers, C Stubs & Universal Localizable Fix
         run: |
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
@@ -29,7 +29,7 @@ jobs:
           echo 'int fileport_makefd(fileport_t port);' >> "$INCLUDE_DIR/fileport.h"
           echo '#endif' >> "$INCLUDE_DIR/fileport.h"
 
-          # Tạo C Header cho các hàm kernel/system missing
+          # Tạo C Header cho các hàm system missing
           cat << 'EOF' > build_headers/CStubs.h
           #ifndef C_STUBS_H
           #define C_STUBS_H
@@ -72,8 +72,16 @@ jobs:
             echo '#include "CStubs.h"' > "$HEADER_FILE"
           fi
 
-          # Tạo file Localizable.strings ở tất cả các thư mục lproj
-          find . -name "*.lproj" -type d | while read -r dir; do
+          # Tự động tạo thư mục lproj chuẩn nếu chưa tồn tại
+          for lang in en vi zh-Hans; do
+            find . -type d -name "ThreeOneOSFive" | while read -r appdir; do
+              mkdir -p "$appdir/${lang}.lproj"
+            done
+            mkdir -p "${lang}.lproj"
+          done
+
+          # Ghi file Localizable.strings vào TẤT CẢ thư mục .lproj tìm thấy
+          find . -type d -name "*.lproj" | while read -r dir; do
             echo '/* Localizable */' > "$dir/Localizable.strings"
           done
 
