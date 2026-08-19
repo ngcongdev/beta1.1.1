@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Patch Headers, Stubs & Fix Localization
+      - name: Patch Headers, Stubs & Fix Localization Environment
         run: |
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
@@ -37,17 +37,18 @@ jobs:
             fi
           done
 
-          # Sửa triệt để file Localization.swift bằng code Swift chuẩn đầy đủ case
+          # Sửa triệt để file Localization.swift bằng cách thêm AppLanguage và EnvironmentKey
           python3 -c '
           import os
           path = "ThreeOneOSFive/helpers/Localization.swift"
-          if os.path.exists(path):
-              swift_code = """import Foundation
+          swift_code = """import SwiftUI
 
-          enum AppLanguage: String, CaseIterable {
+          enum AppLanguage: String, CaseIterable, Identifiable {
               case english = "en"
               case vietnamese = "vi"
               case simplifiedChinese = "zh-Hans"
+
+              var id: String { rawValue }
 
               var languageCode: String {
                   switch self {
@@ -60,9 +61,20 @@ jobs:
                   }
               }
           }
+
+          private struct AppLanguageKey: EnvironmentKey {
+              static let defaultValue: AppLanguage = .english
+          }
+
+          extension EnvironmentValues {
+              var appLanguage: AppLanguage {
+                  get { self[AppLanguageKey.self] }
+                  set { self[AppLanguageKey.self] = newValue }
+              }
+          }
           """
-              with open(path, "w") as f:
-                  f.write(swift_code)
+          with open(path, "w") as f:
+              f.write(swift_code)
           '
 
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
