@@ -37,7 +37,7 @@ jobs:
             fi
           done
 
-          # Sửa triệt để file Localization.swift bằng cách thêm AppLanguage và EnvironmentKey
+          # Sửa triệt để file Localization.swift bằng cách thêm hàm text(_:)
           python3 -c '
           import os
           path = "ThreeOneOSFive/helpers/Localization.swift"
@@ -59,6 +59,14 @@ jobs:
                   case .simplifiedChinese:
                       return "zh-Hans"
                   }
+              }
+
+              func text(_ key: String) -> String {
+                  guard let path = Bundle.main.path(forResource: languageCode, ofType: "lproj"),
+                        let bundle = Bundle(path: path) else {
+                      return NSLocalizedString(key, comment: "")
+                  }
+                  return NSLocalizedString(key, bundle: bundle, comment: "")
               }
           }
 
