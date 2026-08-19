@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Patch Headers, Stubs & Fix Localization Complete
+      - name: Patch Headers, Stubs & Fix Onboarding Binding
         run: |
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
@@ -100,6 +100,22 @@ jobs:
           """
           with open(path, "w") as f:
               f.write(swift_code)
+          '
+
+          # Patch OnboardingView.swift để sửa lỗi Binding mismatch trong ForEach
+          python3 -c '
+          import os
+          path = "ThreeOneOSFive/views/OnboardingView.swift"
+          if os.path.exists(path):
+              with open(path, "r") as f:
+                  content = f.read()
+              
+              # Thay thế cú pháp ForEach gây lỗiBinding bằng cách lặp theo id/element chuẩn
+              content = content.replace("ForEach(AppLanguage.allCases)", "ForEach(AppLanguage.allCases, id: \\.self)")
+              content = content.replace("Text(option.displayName)", "Text(option.displayName as String)")
+              
+              with open(path, "w") as f:
+                  f.write(content)
           '
 
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
