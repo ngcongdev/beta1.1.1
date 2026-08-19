@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Patch Missing Headers, Stubs & Missing Files
+      - name: Patch Missing Headers, Stubs & Language Files
         run: |
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
@@ -29,9 +29,13 @@ jobs:
           echo 'int fileport_makefd(fileport_t port);' >> "$INCLUDE_DIR/fileport.h"
           echo '#endif' >> "$INCLUDE_DIR/fileport.h"
 
-          # Tạo lại thư mục và file rỗng cho zh-Hans nếu lỡ bị xóa
-          mkdir -p ThreeOneOSFive/zh-Hans.lproj
-          touch ThreeOneOSFive/zh-Hans.lproj/Localizable.strings
+          # Tự động tạo thư mục + file Localizable.strings nếu thiếu bất kỳ ngôn ngữ nào
+          for lang in en vi zh-Hans; do
+            mkdir -p "ThreeOneOSFive/${lang}.lproj"
+            if [ ! -f "ThreeOneOSFive/${lang}.lproj/Localizable.strings" ]; then
+              echo '/* Localizable Strings */' > "ThreeOneOSFive/${lang}.lproj/Localizable.strings"
+            fi
+          done
 
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
           ruby -r xcodeproj -e "
