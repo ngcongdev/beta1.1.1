@@ -13,12 +13,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Headers & Patch Swift Source Files
+      - name: Restore Clean Repo & Setup Header Stubs
         run: |
+          # Reset lại sạch code Swift ban đầu để không bị hỏng cú pháp do sed
+          git checkout -- . 2>/dev/null || true
+
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
           
-          # Patch header fileport.h
+          # Header sys/fileport.h
           echo '#ifndef FILEPORT_H' > "$INCLUDE_DIR/fileport.h"
           echo '#define FILEPORT_H' >> "$INCLUDE_DIR/fileport.h"
           echo '#include <sys/cdefs.h>' >> "$INCLUDE_DIR/fileport.h"
@@ -29,19 +32,46 @@ jobs:
           echo 'int fileport_makefd(fileport_t port);' >> "$INCLUDE_DIR/fileport.h"
           echo '#endif' >> "$INCLUDE_DIR/fileport.h"
 
-          # Patch các dòng gọi hàm bị lỗi trực tiếp trong file Swift
-          find . -name "FileBrowserView.swift" -exec sed -i '' 's/MCMActivateContainer(.*)/nil/g' {} +
-          find . -name "CleanerView.swift" -exec sed -i '' 's/MCMActivateContainerPath(.*)/nil/g' {} +
-          find . -name "KernelExploit.swift" -exec sed -i '' 's/sandbox_access_is_active()/1/g' {} +
-          find . -name "KernelExploit.swift" -exec sed -i '' 's/kexploit_opa334()/0/g' {} +
-          find . -name "KernelExploit.swift" -exec sed -i '' 's/proc_self()/nil/g' {} +
-          find . -name "KernelExploit.swift" -exec sed -i '' 's/sandbox_escape(.*)/0/g' {} +
-          find . -name "WallpaperLabView.swift" -exec sed -i '' 's/openApplicationForBundleID(.*)/true/g' {} +
+          # Tạo file C Stubs với kiểu dữ liệu chuẩn khớp hoàn toàn với C/Swift Bridging
+          cat << 'EOF' > build_headers/CStubs.h
+          #ifndef C_STUBS_H
+          #define C_STUBS_H
+          #include <Foundation/Foundation.h>
 
-          # Bridging Header rỗng để tránh conflict
+          #ifdef __cplusplus
+          extern "C" {
+          #endif
+
+          int sandbox_access_is_active(void);
+          int kexploit_opa334(void);
+          void* proc_self(void);
+          int sandbox_escape(void* proc);
+          int64_t MCMActivateContainer(int a, id bundleID, bool c, id _Nullable * _Nullable error);
+          id MCMActivateContainerPath(id path);
+          bool openApplicationForBundleID(id bundleID);
+
+          #ifdef __cplusplus
+          }
+          #endif
+          #endif
+          EOF
+
+          cat << 'EOF' > build_headers/CStubs.m
+          #include "CStubs.h"
+
+          int sandbox_access_is_active(void) { return 1; }
+          int kexploit_opa334(void) { return 0; }
+          void* proc_self(void) { return NULL; }
+          int sandbox_escape(void* proc) { return 0; }
+          int64_t MCMActivateContainer(int a, id bundleID, bool c, id _Nullable * _Nullable error) { return 0; }
+          id MCMActivateContainerPath(id path) { return nil; }
+          bool openApplicationForBundleID(id bundleID) { return true; }
+          EOF
+
+          # Inject Bridging Header
           HEADER_FILE=$(find . -name "*Bridging-Header.h" | head -n 1)
           if [ -n "$HEADER_FILE" ]; then
-            echo "// Blank Bridging Header" > "$HEADER_FILE"
+            echo '#include "CStubs.h"' > "$HEADER_FILE"
           fi
 
           # Tự động tạo thư mục lproj chuẩn
@@ -88,8 +118,8 @@ jobs:
                      COMPILER_INDEX_STORE_ENABLE=NO \
                      USER_HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
                      HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
-                     OTHER_LDFLAGS="-Xlinker -undefined -Xlinker dynamic_lookup" \
-                     OTHER_CFLAGS="-w -Wno-everything -I$(pwd)/build_headers"
+                     OTHER_LDFLAGS="-Xlinker -undefined -Xlinker dynamic_lookup $(pwd)/build_headers/CStubs.m" \
+                     OTHER_CFLAGS="-w -Wno-everything -I$(pwd)/build_headers -include $(pwd)/build_headers/CStubs.h"
 
       - name: Create IPA Package
         run: |
