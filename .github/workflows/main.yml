@@ -29,34 +29,15 @@ jobs:
           #endif
           EOF
 
+          # Tạo file tiếng Việt tạm thời bằng base64 để tránh lỗi ký tự YAML
+          echo "IkNPTU1PTi5ERVZJQ0UiID0gIlRISIogQuG7iiI7CiJkYXNoYm9hcmQuaGFyZHdhcmVfbW9kZWwiID0gIk3huqt1IG3DoXkiOwIic2V0dGluZ3MuaW9zX3ZlcnNpb24iID0gIlBoaMOqbiBi4bqjbiBpT1MiOwIic2V0dGluZ3MuY29tcGF0aWJpbGl0eSIgPSAiVMawxqA5ZyB0aMOtY2giOwIic2V0dGluZ3Muc3VwcG9ydGVkIiA0ICJEQsC3YyBo4buXIHRy4buXIjsKInNldHRpbmdzLnN1cHBvcnRlZF9yYW5nZV9zdW1tYXJ5IiA9ICJI4buXIHRy4buZaU9TIDE1LjAgLSAxNi43LjEwIjsKCiJEQVNIQk9BUkQuRkVBVFVSRVMiID0gIlTINkNIIE7EgE5HIjsKInRhYi5jbGVhbmVyIiA9ICJE4buNbiBk4bqĐcCByw4FjIjsKInRhYi53YWxscGFwZXJzIiA9ICJIIO2uaCBu4buBbiI7CiJkYXNoYm9hcmQuZmVhdHVyZXNfZm9vdGVyIiA9ICJDw4FjIGPDtG5nIGPhuqV1IHThu5FpIMawdSBo4buHIHRoxJFuZ3MiOwoKIkRBU0hCT0FSRC5JTlNUQUxMQVRJT04iID0gIkPDgEkgxJDhurpUIjsKImRhc2hib2FyZC5lbnRlcnByaXNlX3NpZ25pbmciID0gIkNo4bupbmcgY2jhu4kgZG9hbmggbmdoaeG7gnAiOwoKInRhYi5ob21lIiA9ICJUcmFuZyBjaOG7pyI7CiJ0YWIuZmlsZXMiID0gIlThu4dwIHRpbiI7CiJ0YWIucGF0Y2hlcyIgPSAiQuG6o24gdsOhIjs=" > strings.b64
+
           find . -name "*.lproj" -type d | while read -r dir; do
             STR_FILE="$dir/Localizable.strings"
-            TMP_UTF8="$dir/Localizable_utf8.txt"
-            
-            cat << 'EOF' > "$TMP_UTF8"
-"COMMON.DEVICE" = "THIẾT BỊ";
-"dashboard.hardware_model" = "Mẫu máy";
-"settings.ios_version" = "Phiên bản iOS";
-"settings.compatibility" = "Tương thích";
-"settings.supported" = "Được hỗ trợ";
-"settings.supported_range_summary" = "Hỗ trợ iOS 15.0 - 16.7.10";
-
-"DASHBOARD.FEATURES" = "TÍNH NĂNG";
-"tab.cleaner" = "Dọn dẹp rác";
-"tab.wallpapers" = "Hình nền";
-"dashboard.features_footer" = "Các công cụ tối ưu hệ thống";
-
-"DASHBOARD.INSTALLATION" = "CÀI ĐẶT";
-"dashboard.enterprise_signing" = "Chứng chỉ doanh nghiệp";
-
-"tab.home" = "Trang chủ";
-"tab.files" = "Tệp tin";
-"tab.patches" = "Bản vá";
-EOF
             printf "\xFF\xFE" > "$STR_FILE"
-            iconv -f UTF-8 -t UTF-16LE "$TMP_UTF8" >> "$STR_FILE" 2>/dev/null || true
-            rm -f "$TMP_UTF8"
+            base64 -d strings.b64 | iconv -f UTF-8 -t UTF-16LE >> "$STR_FILE" 2>/dev/null || true
           done
+          rm -f strings.b64
 
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
           ruby -r xcodeproj -e "
