@@ -66,7 +66,7 @@ struct SettingsView: View {
 
                 Section(language.text("settings.social_media")) {
                     creditsRow(
-                        name: "Share mod skin",
+                        name: "Cộng đồng fantom",
                         role: language.text("social.fantom_role"),
                         url: "https://t.me/fantombasan"
                     )
