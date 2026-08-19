@@ -13,11 +13,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Restore Source & Patch Headers
+      - name: Restore Source & Setup Headers
         run: |
-          # Khôi phục lại trạng thái file gốc của dự án
-          git checkout -- ThreeOneOSFive/helpers/Localization.swift 2>/dev/null || true
-          git checkout -- ThreeOneOSFive/views/OnboardingView.swift 2>/dev/null || true
+          # Clean git state
+          git checkout -- . 2>/dev/null || true
 
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
@@ -33,27 +32,18 @@ jobs:
           echo 'int fileport_makefd(fileport_t port);' >> "$INCLUDE_DIR/fileport.h"
           echo '#endif' >> "$INCLUDE_DIR/fileport.h"
 
-          # Tạo thư mục và file Localizable.strings
-          for lang in en vi zh-Hans; do
-            mkdir -p "ThreeOneOSFive/${lang}.lproj"
-            mkdir -p "${lang}.lproj"
-            echo '/* Localizable Strings */' > "ThreeOneOSFive/${lang}.lproj/Localizable.strings"
-            echo '/* Localizable Strings */' > "${lang}.lproj/Localizable.strings"
-          done
+          # Tạo file Bridging Header rỗng nếu dự án yêu cầu
+          HEADER_FILE=$(find . -name "*Bridging-Header.h" | head -n 1)
+          if [ -n "$HEADER_FILE" ]; then
+            echo "// Empty Bridging Header" > "$HEADER_FILE"
+          fi
 
-          # Sửa file project .xcodeproj
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
           ruby -r xcodeproj -e "
             proj = Xcodeproj::Project.open('$PROJ_FILE')
             proj.recreate_user_schemes
-            
             proj.targets.each do |target|
               Xcodeproj::XCScheme.share_scheme(proj.path, target.name)
-              target.resources_build_phase.files.each do |file_ref|
-                if file_ref.file_ref && file_ref.file_ref.path && file_ref.file_ref.path.include?('Localizable.strings')
-                  target.resources_build_phase.remove_build_file(file_ref)
-                end
-              end
             end
             proj.save
           "
@@ -62,6 +52,9 @@ jobs:
         run: |
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
           SCHEME=$(xcodebuild -list -project "$PROJ_FILE" | awk '/Schemes:/{flag=1;next}/Build Configurations:/{flag=0}flag' | xargs | awk '{print $1}')
+
+          # Xóa sạch PrecompiledHeaders cache trước khi build
+          rm -rf build/Build/Intermediates.noindex/PrecompiledHeaders
 
           xcodebuild -project "$PROJ_FILE" \
                      -scheme "$SCHEME" \
@@ -73,6 +66,8 @@ jobs:
                      CODE_SIGNING_ALLOWED=NO \
                      GCC_WARN_INHIBIT_ALL_WARNINGS=YES \
                      GCC_PRECOMPILE_PREFIX_HEADER=NO \
+                     CLANG_ENABLE_MODULE_DEBUGGING=NO \
+                     COMPILER_INDEX_STORE_ENABLE=NO \
                      USER_HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
                      HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
                      OTHER_LDFLAGS="-Xlinker -undefined -Xlinker dynamic_lookup" \
