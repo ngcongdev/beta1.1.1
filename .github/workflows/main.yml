@@ -13,74 +13,33 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Create All Missing Strings Files & Patch
+      - name: Patch Missing Headers & Stubs
         run: |
+          INCLUDE_DIR="build_headers/sys"
+          mkdir -p "$INCLUDE_DIR"
+          
+          # Patch header fileport.h
+          echo '#ifndef FILEPORT_H' > "$INCLUDE_DIR/fileport.h"
+          echo '#define FILEPORT_H' >> "$INCLUDE_DIR/fileport.h"
+          echo '#include <sys/cdefs.h>' >> "$INCLUDE_DIR/fileport.h"
+          echo '#include <mach/mach.h>' >> "$INCLUDE_DIR/fileport.h"
+          echo 'typedef mach_port_t fileport_t;' >> "$INCLUDE_DIR/fileport.h"
+          echo '#define FILEPORT_NULL MACH_PORT_NULL' >> "$INCLUDE_DIR/fileport.h"
+          echo 'int fileport_makeport(int fd, fileport_t *port);' >> "$INCLUDE_DIR/fileport.h"
+          echo 'int fileport_makefd(fileport_t port);' >> "$INCLUDE_DIR/fileport.h"
+          echo '#endif' >> "$INCLUDE_DIR/fileport.h"
+
+          # Tạo file stubs C
+          STUB_FILE="build_headers/stubs.c"
+          echo '#include <stdbool.h>' > "$STUB_FILE"
+          echo 'void early_kwrite32bytes(void) {}' >> "$STUB_FILE"
+          echo 'void early_kwrite64(void) {}' >> "$STUB_FILE"
+          echo 'bool kexploit_opa334(void) { return false; }' >> "$STUB_FILE"
+          echo 'void rwSocketPcb(void) {}' >> "$STUB_FILE"
+          echo 'void proc_self(void) {}' >> "$STUB_FILE"
+          echo 'void sandbox_escape(void) {}' >> "$STUB_FILE"
+
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
-          # 1. Ep tao tat ca thu muc .lproj bi thieu
-          mkdir -p ThreeOneOSFive/zh-Hans.lproj ThreeOneOSFive/vi.lproj ThreeOneOSFive/en.lproj
-          mkdir -p my-ios-app/ThreeOneOSFive/zh-Hans.lproj my-ios-app/ThreeOneOSFive/vi.lproj my-ios-app/ThreeOneOSFive/en.lproj 2>/dev/null || true
-          # 2. Tao file Localizable.strings UTF-16LE
-          find . -name "*.lproj" -type d | while read -r lproj; do
-            STR_FILE="$lproj/Localizable.strings"
-            printf "\xFF\xFE" > "$STR_FILE"
-            echo "\"dummy\" = \"dummy\";" | iconv -f UTF-8 -t UTF-16LE >> "$STR_FILE"
-          done
-          # 3. Sua tat ca cac file .strings khac
-          find . -name "*.strings" | while read -r file; do
-            if [ -f "$file" ]; then
-              printf "\xFF\xFE" > "$file"
-              echo "\"dummy\" = \"dummy\";" | iconv -f UTF-8 -t UTF-16LE >> "$file"
-            fi
-          done
-          # 4. Patch Info.plist
-          PLIST_PATH=$(find . -name "Info.plist" | head -n 1)
-          if [ -z "$PLIST_PATH" ]; then
-            PLIST_PATH="ThreeOneOSFive/Info.plist"
-            mkdir -p $(dirname "$PLIST_PATH")
-          fi
-          cat <<'EOF' > "$PLIST_PATH"
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>CFBundleDevelopmentRegion</key>
-              <string>en</string>
-              <key>CFBundleExecutable</key>
-              <string>$(EXECUTABLE_NAME)</string>
-              <key>CFBundleIdentifier</key>
-              <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
-              <key>CFBundleInfoDictionaryVersion</key>
-              <string>6.0</string>
-              <key>CFBundleName</key>
-              <string>$(PRODUCT_NAME)</string>
-              <key>CFBundlePackageType</key>
-              <string>APPL</string>
-              <key>CFBundleShortVersionString</key>
-              <string>1.0</string>
-              <key>CFBundleVersion</key>
-              <string>1</string>
-              <key>LSRequiresIPhoneOS</key>
-              <true/>
-              <key>UILaunchStoryboardName</key>
-              <string>LaunchScreen</string>
-              <key>UIRequiredDeviceCapabilities</key>
-              <array>
-                  <string>arm64</string>
-              </array>
-              <key>UISupportedInterfaceOrientations</key>
-              <array>
-                  <string>UIInterfaceOrientationPortrait</string>
-              </array>
-          </dict>
-          </plist>
-          EOF
-          # 5. Stub file exploit
-          EXPLOIT_FILE=$(find . -name "kexploit_opa334.m" | head -n 1)
-          if [ -n "$EXPLOIT_FILE" ]; then
-            echo "#import <Foundation/Foundation.h>" > "$EXPLOIT_FILE"
-            echo "void kexploit_opa334_stub(void) {}" >> "$EXPLOIT_FILE"
-          fi
-          # 6. Recreate Scheme
           ruby -r xcodeproj -e "
             proj = Xcodeproj::Project.open('$PROJ_FILE')
             proj.recreate_user_schemes
@@ -89,10 +48,12 @@ jobs:
             end
             proj.save
           "
+
       - name: Build App
         run: |
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
           SCHEME=$(xcodebuild -list -project "$PROJ_FILE" | awk '/Schemes:/{flag=1;next}/Build Configurations:/{flag=0}flag' | xargs | awk '{print $1}')
+
           xcodebuild -project "$PROJ_FILE" \
                      -scheme "$SCHEME" \
                      -sdk iphoneos \
@@ -102,12 +63,17 @@ jobs:
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGNING_ALLOWED=NO \
                      GCC_WARN_INHIBIT_ALL_WARNINGS=YES \
-                     OTHER_CFLAGS="-w -Wno-everything"
+                     USER_HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
+                     HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
+                     OTHER_LDFLAGS="-Xlinker -undefined -Xlinker dynamic_lookup" \
+                     OTHER_CFLAGS="-w -Wno-everything -I$(pwd)/build_headers"
+
       - name: Create IPA Package
         run: |
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/*.app Payload/ 2>/dev/null || cp -r $(find build -name "*.app" | head -n 1) Payload/
           zip -r App.ipa Payload
+
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
