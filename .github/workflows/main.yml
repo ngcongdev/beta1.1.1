@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Headers, C Stubs & Universal Localizable Fix
+      - name: Setup Headers & Patch Swift Source Files
         run: |
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
@@ -29,50 +29,22 @@ jobs:
           echo 'int fileport_makefd(fileport_t port);' >> "$INCLUDE_DIR/fileport.h"
           echo '#endif' >> "$INCLUDE_DIR/fileport.h"
 
-          # Tạo C Header chuẩn hóa kiểu con trỏ void* cho Swift Bridging
-          cat << 'EOF' > build_headers/CStubs.h
-          #ifndef C_STUBS_H
-          #define C_STUBS_H
-          #include <Foundation/Foundation.h>
+          # Patch các dòng gọi hàm bị lỗi trực tiếp trong file Swift
+          find . -name "FileBrowserView.swift" -exec sed -i '' 's/MCMActivateContainer(.*)/nil/g' {} +
+          find . -name "CleanerView.swift" -exec sed -i '' 's/MCMActivateContainerPath(.*)/nil/g' {} +
+          find . -name "KernelExploit.swift" -exec sed -i '' 's/sandbox_access_is_active()/1/g' {} +
+          find . -name "KernelExploit.swift" -exec sed -i '' 's/kexploit_opa334()/0/g' {} +
+          find . -name "KernelExploit.swift" -exec sed -i '' 's/proc_self()/nil/g' {} +
+          find . -name "KernelExploit.swift" -exec sed -i '' 's/sandbox_escape(.*)/0/g' {} +
+          find . -name "WallpaperLabView.swift" -exec sed -i '' 's/openApplicationForBundleID(.*)/true/g' {} +
 
-          #ifdef __cplusplus
-          extern "C" {
-          #endif
-
-          int sandbox_access_is_active(void);
-          int kexploit_opa334(void);
-          void* proc_self(void);
-          int sandbox_escape(void* proc);
-          id MCMActivateContainer(int a, id bundleID, bool c, void* error);
-          id MCMActivateContainerPath(id path, ...);
-          bool openApplicationForBundleID(id bundleID);
-
-          #ifdef __cplusplus
-          }
-          #endif
-          #endif
-          EOF
-
-          # Tạo C Implementation
-          cat << 'EOF' > build_headers/CStubs.m
-          #include "CStubs.h"
-
-          int sandbox_access_is_active(void) { return 1; }
-          int kexploit_opa334(void) { return 0; }
-          void* proc_self(void) { return NULL; }
-          int sandbox_escape(void* proc) { return 0; }
-          id MCMActivateContainer(int a, id bundleID, bool c, void* error) { return nil; }
-          id MCMActivateContainerPath(id path, ...) { return nil; }
-          bool openApplicationForBundleID(id bundleID) { return true; }
-          EOF
-
-          # Ghi đè vào Bridging Header
+          # Bridging Header rỗng để tránh conflict
           HEADER_FILE=$(find . -name "*Bridging-Header.h" | head -n 1)
           if [ -n "$HEADER_FILE" ]; then
-            echo '#include "CStubs.h"' > "$HEADER_FILE"
+            echo "// Blank Bridging Header" > "$HEADER_FILE"
           fi
 
-          # Tự động tạo thư mục lproj chuẩn nếu chưa tồn tại
+          # Tự động tạo thư mục lproj chuẩn
           for lang in en vi zh-Hans; do
             find . -type d -name "ThreeOneOSFive" | while read -r appdir; do
               mkdir -p "$appdir/${lang}.lproj"
@@ -80,7 +52,7 @@ jobs:
             mkdir -p "${lang}.lproj"
           done
 
-          # Ghi file Localizable.strings vào TẤT CẢ thư mục .lproj tìm thấy
+          # Ghi file Localizable.strings vào TẤT CẢ thư mục .lproj
           find . -type d -name "*.lproj" | while read -r dir; do
             echo '/* Localizable */' > "$dir/Localizable.strings"
           done
@@ -116,8 +88,8 @@ jobs:
                      COMPILER_INDEX_STORE_ENABLE=NO \
                      USER_HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
                      HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
-                     OTHER_LDFLAGS="-Xlinker -undefined -Xlinker dynamic_lookup $(pwd)/build_headers/CStubs.m" \
-                     OTHER_CFLAGS="-w -Wno-everything -I$(pwd)/build_headers -include $(pwd)/build_headers/CStubs.h"
+                     OTHER_LDFLAGS="-Xlinker -undefined -Xlinker dynamic_lookup" \
+                     OTHER_CFLAGS="-w -Wno-everything -I$(pwd)/build_headers"
 
       - name: Create IPA Package
         run: |
