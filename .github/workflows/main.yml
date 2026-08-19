@@ -13,11 +13,8 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Restore Source & Setup Headers
+      - name: Setup Headers & Localizable Files
         run: |
-          # Clean git state
-          git checkout -- . 2>/dev/null || true
-
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
           
@@ -32,16 +29,31 @@ jobs:
           echo 'int fileport_makefd(fileport_t port);' >> "$INCLUDE_DIR/fileport.h"
           echo '#endif' >> "$INCLUDE_DIR/fileport.h"
 
-          # Tạo file Bridging Header rỗng nếu dự án yêu cầu
+          # Tạo file Localizable.strings đầy đủ ở tất cả các thư mục lproj
+          find . -name "*.lproj" -type d | while read -r dir; do
+            echo '/* Localizable */' > "$dir/Localizable.strings"
+          done
+
+          # Tạo bổ sung các thư mục ngôn ngữ chuẩn nếu thiếu
+          for lang in en vi zh-Hans; do
+            mkdir -p "ThreeOneOSFive/${lang}.lproj"
+            mkdir -p "${lang}.lproj"
+            echo '/* Localizable */' > "ThreeOneOSFive/${lang}.lproj/Localizable.strings"
+            echo '/* Localizable */' > "${lang}.lproj/Localizable.strings"
+          done
+
+          # Xử lý Bridging Header
           HEADER_FILE=$(find . -name "*Bridging-Header.h" | head -n 1)
           if [ -n "$HEADER_FILE" ]; then
             echo "// Empty Bridging Header" > "$HEADER_FILE"
           fi
 
+          # Sửa file project .xcodeproj
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
           ruby -r xcodeproj -e "
             proj = Xcodeproj::Project.open('$PROJ_FILE')
             proj.recreate_user_schemes
+            
             proj.targets.each do |target|
               Xcodeproj::XCScheme.share_scheme(proj.path, target.name)
             end
@@ -53,7 +65,6 @@ jobs:
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
           SCHEME=$(xcodebuild -list -project "$PROJ_FILE" | awk '/Schemes:/{flag=1;next}/Build Configurations:/{flag=0}flag' | xargs | awk '{print $1}')
 
-          # Xóa sạch PrecompiledHeaders cache trước khi build
           rm -rf build/Build/Intermediates.noindex/PrecompiledHeaders
 
           xcodebuild -project "$PROJ_FILE" \
