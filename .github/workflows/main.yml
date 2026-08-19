@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Patch Headers, Stubs & Bridging Header
+      - name: Patch Headers, Stubs & Fix Localization
         run: |
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
@@ -29,21 +29,41 @@ jobs:
           echo 'int fileport_makefd(fileport_t port);' >> "$INCLUDE_DIR/fileport.h"
           echo '#endif' >> "$INCLUDE_DIR/fileport.h"
 
-          # Tự động kiểm tra và tạo Bridging Header tối thiểu nếu chưa có
-          HEADER_FILE=$(find ThreeOneOSFive -name "*Bridging-Header.h" | head -n 1)
-          if [ -z "$HEADER_FILE" ]; then
-            mkdir -p ThreeOneOSFive
-            HEADER_FILE="ThreeOneOSFive/ThreeOneOSFive-Bridging-Header.h"
-            touch "$HEADER_FILE"
-          fi
-
-          # Tự động tạo thư mục ngôn ngữ nếu thiếu
+          # Tự động tạo thư mục và file ngôn ngữ rỗng nếu thiếu
           for lang in en vi zh-Hans; do
             mkdir -p "ThreeOneOSFive/${lang}.lproj"
             if [ ! -f "ThreeOneOSFive/${lang}.lproj/Localizable.strings" ]; then
               echo '/* Localizable Strings */' > "ThreeOneOSFive/${lang}.lproj/Localizable.strings"
             fi
           done
+
+          # Sửa triệt để file Localization.swift bằng code Swift chuẩn đầy đủ case
+          python3 -c '
+          import os
+          path = "ThreeOneOSFive/helpers/Localization.swift"
+          if os.path.exists(path):
+              swift_code = """import Foundation
+
+          enum AppLanguage: String, CaseIterable {
+              case english = "en"
+              case vietnamese = "vi"
+              case simplifiedChinese = "zh-Hans"
+
+              var languageCode: String {
+                  switch self {
+                  case .english:
+                      return "en"
+                  case .vietnamese:
+                      return "vi"
+                  case .simplifiedChinese:
+                      return "zh-Hans"
+                  }
+              }
+          }
+          """
+              with open(path, "w") as f:
+                  f.write(swift_code)
+          '
 
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
           ruby -r xcodeproj -e "
