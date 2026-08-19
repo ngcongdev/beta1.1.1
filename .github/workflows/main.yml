@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Patch Headers, Stubs, Localization & Project Resources
+      - name: Patch Headers, Stubs, Localization & OnboardingView
         run: |
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
@@ -29,7 +29,7 @@ jobs:
           echo 'int fileport_makefd(fileport_t port);' >> "$INCLUDE_DIR/fileport.h"
           echo '#endif' >> "$INCLUDE_DIR/fileport.h"
 
-          # Tạo đầy đủ thư mục và file Localizable.strings ở mọi vị trí có thể
+          # Tạo thư mục và file Localizable.strings
           for lang in en vi zh-Hans; do
             mkdir -p "ThreeOneOSFive/${lang}.lproj"
             mkdir -p "${lang}.lproj"
@@ -37,7 +37,7 @@ jobs:
             echo '/* Localizable Strings */' > "${lang}.lproj/Localizable.strings"
           done
 
-          # Cập nhật hoàn chỉnh Localization.swift
+          # Cập nhật Localization.swift
           python3 -c '
           import os
           path = "ThreeOneOSFive/helpers/Localization.swift"
@@ -102,7 +102,7 @@ jobs:
               f.write(swift_code)
           '
 
-          # Patch OnboardingView.swift
+          # Khôi phục/Sửa OnboardingView.swift chuẩn hóa ForEach
           python3 -c '
           import os
           path = "ThreeOneOSFive/views/OnboardingView.swift"
@@ -110,14 +110,15 @@ jobs:
               with open(path, "r") as f:
                   content = f.read()
               
-              content = content.replace("ForEach(AppLanguage.allCases)", "ForEach(AppLanguage.allCases, id: \\.self)")
-              content = content.replace("Text(option.displayName)", "Text(option.displayName as String)")
+              # Sửa các chuỗi bị lặp do patch trước
+              content = content.replace("ForEach(AppLanguage.allCases, id: \\.self)", "ForEach(AppLanguage.allCases, id: \\.rawValue)")
+              content = content.replace("Text(option.displayName as String)", "Text(option.displayName)")
               
               with open(path, "w") as f:
                   f.write(content)
           '
 
-          # Sửa file project .xcodeproj: Loại bỏ các file Strings bị lỡ nhịp đường dẫn khỏi Build Phase Copy Resources
+          # Sửa file project .xcodeproj
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
           ruby -r xcodeproj -e "
             proj = Xcodeproj::Project.open('$PROJ_FILE')
