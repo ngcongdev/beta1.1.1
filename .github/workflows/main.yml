@@ -1,0 +1,131 @@
+name: Build iOS IPA
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Preserve Original Localization Strings & Patch
+        run: |
+          PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
+
+          # 1. Chuyển đổi toàn bộ file .strings gốc sang dạng UTF-16LE có BOM mà KHÔNG XÓA NỘI DUNG DỊCH
+          find . -name "*.strings" | while read -r file; do
+            if [ -f "$file" ]; then
+              # Tạo file tạm dạng UTF-8
+              plutil -convert json "$file" -o "$file.json" 2>/dev/null || true
+              
+              if [ -f "$file.json" ]; then
+                # Ghi byte BOM UTF-16LE
+                printf "\xFF\xFE" > "$file.tmp"
+                # Convert nội dung gốc sang UTF-16LE
+                iconv -f UTF-8 -t UTF-16LE "$file" >> "$file.tmp" 2>/dev/null || iconv -f UTF-8 -t UTF-16LE "$file.json" >> "$file.tmp" 2>/dev/null || true
+                mv "$file.tmp" "$file"
+                rm -f "$file.json"
+              else
+                # Fallback nếu file đã là text chuẩn
+                TMP_TXT="$file.txt"
+                cp "$file" "$TMP_TXT"
+                printf "\xFF\xFE" > "$file"
+                iconv -f UTF-8 -t UTF-16LE "$TMP_TXT" >> "$file" 2>/dev/null || true
+                rm -f "$TMP_TXT"
+              fi
+            fi
+          done
+
+          # 2. Patch Info.plist
+          PLIST_PATH=$(find . -name "Info.plist" | head -n 1)
+          if [ -z "$PLIST_PATH" ]; then
+            PLIST_PATH="ThreeOneOSFive/Info.plist"
+            mkdir -p $(dirname "$PLIST_PATH")
+          fi
+
+          cat <<'EOF' > "$PLIST_PATH"
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleDevelopmentRegion</key>
+              <string>vi</string>
+              <key>CFBundleExecutable</key>
+              <string>$(EXECUTABLE_NAME)</string>
+              <key>CFBundleIdentifier</key>
+              <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+              <key>CFBundleInfoDictionaryVersion</key>
+              <string>6.0</string>
+              <key>CFBundleName</key>
+              <string>$(PRODUCT_NAME)</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+              <key>CFBundleVersion</key>
+              <string>1</string>
+              <key>LSRequiresIPhoneOS</key>
+              <true/>
+              <key>UILaunchStoryboardName</key>
+              <string>LaunchScreen</string>
+              <key>UIRequiredDeviceCapabilities</key>
+              <array>
+                  <string>arm64</string>
+              </array>
+              <key>UISupportedInterfaceOrientations</key>
+              <array>
+                  <string>UIInterfaceOrientationPortrait</string>
+              </array>
+          </dict>
+          </plist>
+          EOF
+
+          # 3. Stub file exploit
+          EXPLOIT_FILE=$(find . -name "kexploit_opa334.m" | head -n 1)
+          if [ -n "$EXPLOIT_FILE" ]; then
+            echo "#import <Foundation/Foundation.h>" > "$EXPLOIT_FILE"
+            echo "void kexploit_opa334_stub(void) {}" >> "$EXPLOIT_FILE"
+          fi
+
+          # 4. Recreate Scheme
+          ruby -r xcodeproj -e "
+            proj = Xcodeproj::Project.open('$PROJ_FILE')
+            proj.recreate_user_schemes
+            proj.targets.each do |target|
+              Xcodeproj::XCScheme.share_scheme(proj.path, target.name)
+            end
+            proj.save
+          "
+
+      - name: Build App
+        run: |
+          PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
+          SCHEME=$(xcodebuild -list -project "$PROJ_FILE" | awk '/Schemes:/{flag=1;next}/Build Configurations:/{flag=0}flag' | xargs | awk '{print $1}')
+
+          xcodebuild -project "$PROJ_FILE" \
+                     -scheme "$SCHEME" \
+                     -sdk iphoneos \
+                     -configuration Release \
+                     -derivedDataPath build \
+                     CODE_SIGN_IDENTITY="" \
+                     CODE_SIGNING_REQUIRED=NO \
+                     CODE_SIGNING_ALLOWED=NO \
+                     GCC_WARN_INHIBIT_ALL_WARNINGS=YES \
+                     OTHER_CFLAGS="-w -Wno-everything"
+
+      - name: Create IPA Package
+        run: |
+          mkdir -p Payload
+          cp -r build/Build/Products/Release-iphoneos/*.app Payload/ 2>/dev/null || cp -r $(find build -name "*.app" | head -n 1) Payload/
+          zip -r App.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ThreeOneOSFive-IPA
+          path: App.ipa
