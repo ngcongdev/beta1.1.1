@@ -17,32 +17,29 @@ jobs:
         run: |
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
-          cat << 'EOF' > "$INCLUDE_DIR/fileport.h"
-          #ifndef FILEPORT_H
-          #define FILEPORT_H
-          #include <sys/cdefs.h>
-          #include <mach/mach.h>
-          typedef mach_port_t fileport_t;
-          #define FILEPORT_NULL MACH_PORT_NULL
-          int fileport_makeport(int fd, fileport_t *port);
-          int fileport_makefd(fileport_t port);
-          #endif
-          EOF
+          
+          # Patch header fileport.h
+          echo '#ifndef FILEPORT_H' > "$INCLUDE_DIR/fileport.h"
+          echo '#define FILEPORT_H' >> "$INCLUDE_DIR/fileport.h"
+          echo '#include <sys/cdefs.h>' >> "$INCLUDE_DIR/fileport.h"
+          echo '#include <mach/mach.h>' >> "$INCLUDE_DIR/fileport.h"
+          echo 'typedef mach_port_t fileport_t;' >> "$INCLUDE_DIR/fileport.h"
+          echo '#define FILEPORT_NULL MACH_PORT_NULL' >> "$INCLUDE_DIR/fileport.h"
+          echo 'int fileport_makeport(int fd, fileport_t *port);' >> "$INCLUDE_DIR/fileport.h"
+          echo 'int fileport_makefd(fileport_t port);' >> "$INCLUDE_DIR/fileport.h"
+          echo '#endif' >> "$INCLUDE_DIR/fileport.h"
 
-          # Tạo file C-stub để cung cấp đầy đủ các missing symbols cho Linker
-          cat << 'EOF' > build_headers/missing_stubs.c
-          #include <stdint.h>
-          #include <stdbool.h>
+          # Stub các symbol bị thiếu để qua mặt Linker (ld)
+          STUB_FILE="build_headers/stubs.c"
+          echo '#include <stdbool.h>' > "$STUB_FILE"
+          echo 'void early_kwrite32bytes(void) {}' >> "$STUB_FILE"
+          echo 'void early_kwrite64(void) {}' >> "$STUB_FILE"
+          echo 'bool kexploit_opa334(void) { return false; }' >> "$STUB_FILE"
+          echo 'void rwSocketPcb(void) {}' >> "$STUB_FILE"
+          echo 'void proc_self(void) {}' >> "$STUB_FILE"
+          echo 'void sandbox_escape(void) {}' >> "$STUB_FILE"
 
-          void early_kwrite32bytes(void) {}
-          void early_kwrite64(void) {}
-          bool kexploit_opa334(void) { return false; }
-          void rwSocketPcb(void) {}
-          void proc_self(void) {}
-          void sandbox_escape(void) {}
-          EOF
-
-          # Convert file localization từ JSON sang binary strings
+          # Nạp bản dịch tiếng Việt sang binary strings
           cat << 'EOF' > translations.json
           {
             "COMMON.DEVICE": "THIẾT BỊ",
@@ -95,7 +92,7 @@ EOF
                      USER_HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
                      HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
                      OTHER_LDFLAGS="-Wl,-undefined,dynamic_lookup" \
-                     OTHER_CFLAGS="-w -Wno-everything -I$(pwd)/build_headers $(pwd)/build_headers/missing_stubs.c"
+                     OTHER_CFLAGS="-w -Wno-everything -I$(pwd)/build_headers $(pwd)/build_headers/stubs.c"
 
       - name: Create IPA Package
         run: |
