@@ -8,12 +8,12 @@ on:
 jobs:
   build:
     runs-on: macos-14
- 
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Patch Headers, Stubs & Fix Onboarding Binding
+      - name: Patch Missing Headers & Stubs
         run: |
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
@@ -29,94 +29,15 @@ jobs:
           echo 'int fileport_makefd(fileport_t port);' >> "$INCLUDE_DIR/fileport.h"
           echo '#endif' >> "$INCLUDE_DIR/fileport.h"
 
-          # Tự động tạo thư mục và file ngôn ngữ rỗng nếu thiếu
-          for lang in en vi zh-Hans; do
-            mkdir -p "ThreeOneOSFive/${lang}.lproj"
-            if [ ! -f "ThreeOneOSFive/${lang}.lproj/Localizable.strings" ]; then
-              echo '/* Localizable Strings */' > "ThreeOneOSFive/${lang}.lproj/Localizable.strings"
-            fi
-          done
-
-          # Cập nhật hoàn chỉnh Localization.swift
-          python3 -c '
-          import os
-          path = "ThreeOneOSFive/helpers/Localization.swift"
-          swift_code = """import SwiftUI
-
-          enum AppLanguage: String, CaseIterable, Identifiable, Hashable {
-              case english = "en"
-              case vietnamese = "vi"
-              case simplifiedChinese = "zh-Hans"
-
-              var id: String { rawValue }
-
-              var languageCode: String {
-                  switch self {
-                  case .english:
-                      return "en"
-                  case .vietnamese:
-                      return "vi"
-                  case .simplifiedChinese:
-                      return "zh-Hans"
-                  }
-              }
-
-              var displayName: String {
-                  switch self {
-                  case .english:
-                      return "English"
-                  case .vietnamese:
-                      return "Tiếng Việt"
-                  case .simplifiedChinese:
-                      return "简体中文"
-                  }
-              }
-
-              func text(_ key: String, _ args: CVarArg...) -> String {
-                  let format: String
-                  if let path = Bundle.main.path(forResource: languageCode, ofType: "lproj"),
-                     let bundle = Bundle(path: path) {
-                      format = NSLocalizedString(key, bundle: bundle, comment: "")
-                  } else {
-                      format = NSLocalizedString(key, comment: "")
-                  }
-                  if args.isEmpty {
-                      return format
-                  }
-                  return String(format: format, arguments: args)
-              }
-          }
-
-          private struct AppLanguageKey: EnvironmentKey {
-              static let defaultValue: AppLanguage = .english
-          }
-
-          extension EnvironmentValues {
-              var appLanguage: AppLanguage {
-                  get { self[AppLanguageKey.self] }
-                  set { self[AppLanguageKey.self] = newValue }
-              }
-          }
-          """
-          with open(path, "w") as f:
-              f.write(swift_code)
-          '
-
-          # Patch OnboardingView.swift để sửa lỗi Binding mismatch trong ForEach
-          python3 -c '
-          import os
-          path = "ThreeOneOSFive/views/OnboardingView.swift"
-          if os.path.exists(path):
-              with open(path, "r") as f:
-                  content = f.read()
-              
-              # Thay thế cú pháp ForEach gây lỗiBinding bằng cách lặp theo id/element chuẩn
-              content = content.replace("ForEach(AppLanguage.allCases)", "ForEach(AppLanguage.allCases, id: \\.self)")
-              content = content.replace("Text(option.displayName)", "Text(option.displayName as String)")
-              
-              with open(path, "w") as f:
-                  f.write(content)
-          '
+          # Tạo file stubs C
+          STUB_FILE="build_headers/stubs.c"
+          echo '#include <stdbool.h>' > "$STUB_FILE"
+          echo 'void early_kwrite32bytes(void) {}' >> "$STUB_FILE"
+          echo 'void early_kwrite64(void) {}' >> "$STUB_FILE"
+          echo 'bool kexploit_opa334(void) { return false; }' >> "$STUB_FILE"
+          echo 'void rwSocketPcb(void) {}' >> "$STUB_FILE"
+          echo 'void proc_self(void) {}' >> "$STUB_FILE"
+          echo 'void sandbox_escape(void) {}' >> "$STUB_FILE"
 
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
           ruby -r xcodeproj -e "
@@ -142,7 +63,6 @@ jobs:
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGNING_ALLOWED=NO \
                      GCC_WARN_INHIBIT_ALL_WARNINGS=YES \
-                     GCC_PRECOMPILE_PREFIX_HEADER=NO \
                      USER_HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
                      HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
                      OTHER_LDFLAGS="-Xlinker -undefined -Xlinker dynamic_lookup" \
