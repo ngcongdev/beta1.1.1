@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Patch Headers, Stubs & Fix Localization Environment
+      - name: Patch Headers, Stubs & Fix Localization Complete
         run: |
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
@@ -37,13 +37,13 @@ jobs:
             fi
           done
 
-          # Sửa triệt để file Localization.swift bằng cách thêm hàm text(_:)
+          # Cập nhật hoàn chỉnh Localization.swift
           python3 -c '
           import os
           path = "ThreeOneOSFive/helpers/Localization.swift"
           swift_code = """import SwiftUI
 
-          enum AppLanguage: String, CaseIterable, Identifiable {
+          enum AppLanguage: String, CaseIterable, Identifiable, Hashable {
               case english = "en"
               case vietnamese = "vi"
               case simplifiedChinese = "zh-Hans"
@@ -61,12 +61,29 @@ jobs:
                   }
               }
 
-              func text(_ key: String) -> String {
-                  guard let path = Bundle.main.path(forResource: languageCode, ofType: "lproj"),
-                        let bundle = Bundle(path: path) else {
-                      return NSLocalizedString(key, comment: "")
+              var displayName: String {
+                  switch self {
+                  case .english:
+                      return "English"
+                  case .vietnamese:
+                      return "Tiếng Việt"
+                  case .simplifiedChinese:
+                      return "简体中文"
                   }
-                  return NSLocalizedString(key, bundle: bundle, comment: "")
+              }
+
+              func text(_ key: String, _ args: CVarArg...) -> String {
+                  let format: String
+                  if let path = Bundle.main.path(forResource: languageCode, ofType: "lproj"),
+                     let bundle = Bundle(path: path) {
+                      format = NSLocalizedString(key, bundle: bundle, comment: "")
+                  } else {
+                      format = NSLocalizedString(key, comment: "")
+                  }
+                  if args.isEmpty {
+                      return format
+                  }
+                  return String(format: format, arguments: args)
               }
           }
 
