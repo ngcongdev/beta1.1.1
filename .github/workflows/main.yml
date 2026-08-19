@@ -29,7 +29,7 @@ jobs:
           echo 'int fileport_makefd(fileport_t port);' >> "$INCLUDE_DIR/fileport.h"
           echo '#endif' >> "$INCLUDE_DIR/fileport.h"
 
-          # Stub các symbol bị thiếu để qua mặt Linker (ld)
+          # Stub các symbol bị thiếu
           STUB_FILE="build_headers/stubs.c"
           echo '#include <stdbool.h>' > "$STUB_FILE"
           echo 'void early_kwrite32bytes(void) {}' >> "$STUB_FILE"
@@ -39,13 +39,34 @@ jobs:
           echo 'void proc_self(void) {}' >> "$STUB_FILE"
           echo 'void sandbox_escape(void) {}' >> "$STUB_FILE"
 
-          # Tạo file JSON không dùng heredoc EOF để tránh lỗi YAML Indentation
-          echo '{"COMMON.DEVICE":"THIẾT BỊ","dashboard.hardware_model":"Mẫu máy","settings.ios_version":"Phiên bản iOS","settings.compatibility":"Tương thích","settings.supported":"Được hỗ trợ","settings.supported_range_summary":"Hỗ trợ iOS 15.0 - 16.7.10","DASHBOARD.FEATURES":"TÍNH NĂNG","tab.cleaner":"Dọn dẹp rác","tab.wallpapers":"Hình nền","dashboard.features_footer":"Các công cụ tối ưu hệ thống","DASHBOARD.INSTALLATION":"CÀI ĐẶT","dashboard.enterprise_signing":"Chứng chỉ doanh nghiệp","tab.home":"Trang chủ","tab.files":"Tệp tin","tab.patches":"Bản vá"}' > translations.json
+          # Tạo file XML Plist chuẩn
+          echo '<?xml version="1.0" encoding="UTF-8"?>' > base.plist
+          echo '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' >> base.plist
+          echo '<plist version="1.0"><dict>' >> base.plist
+          echo '<key>COMMON.DEVICE</key><string>THIẾT BỊ</string>' >> base.plist
+          echo '<key>dashboard.hardware_model</key><string>Mẫu máy</string>' >> base.plist
+          echo '<key>settings.ios_version</key><string>Phiên bản iOS</string>' >> base.plist
+          echo '<key>settings.compatibility</key><string>Tương thích</string>' >> base.plist
+          echo '<key>settings.supported</key><string>Được hỗ trợ</string>' >> base.plist
+          echo '<key>settings.supported_range_summary</key><string>Hỗ trợ iOS 15.0 - 16.7.10</string>' >> base.plist
+          echo '<key>DASHBOARD.FEATURES</key><string>TÍNH NĂNG</string>' >> base.plist
+          echo '<key>tab.cleaner</key><string>Dọn dẹp rác</string>' >> base.plist
+          echo '<key>tab.wallpapers</key><string>Hình nền</string>' >> base.plist
+          echo '<key>dashboard.features_footer</key><string>Các công cụ tối ưu hệ thống</string>' >> base.plist
+          echo '<key>DASHBOARD.INSTALLATION</key><string>CÀI ĐẶT</string>' >> base.plist
+          echo '<key>dashboard.enterprise_signing</key><string>Chứng chỉ doanh nghiệp</string>' >> base.plist
+          echo '<key>tab.home</key><string>Trang chủ</string>' >> base.plist
+          echo '<key>tab.files</key><string>Tệp tin</string>' >> base.plist
+          echo '<key>tab.patches</key><string>Bản vá</string>' >> base.plist
+          echo '</dict></plist>' >> base.plist
+
+          # Convert sang OpenStep Format mà builtin-copyStrings bắt buộc nhận diện được
+          plutil -convert xml1 base.plist -o clean.strings
 
           find . -name "*.strings" | while read -r file; do
-            plutil -convert binary1 translations.json -o "$file"
+            cp clean.strings "$file"
           done
-          rm -f translations.json
+          rm -f base.plist clean.strings
 
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
           ruby -r xcodeproj -e "
