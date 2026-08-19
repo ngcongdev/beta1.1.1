@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Headers & Localizable Files
+      - name: Setup Headers & C Stubs
         run: |
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
@@ -29,31 +29,58 @@ jobs:
           echo 'int fileport_makefd(fileport_t port);' >> "$INCLUDE_DIR/fileport.h"
           echo '#endif' >> "$INCLUDE_DIR/fileport.h"
 
-          # Tạo file Localizable.strings đầy đủ ở tất cả các thư mục lproj
+          # Tạo C Header cho các hàm kernel/system missing
+          cat << 'EOF' > build_headers/CStubs.h
+          #ifndef C_STUBS_H
+          #define C_STUBS_H
+          #include <Foundation/Foundation.h>
+
+          #ifdef __cplusplus
+          extern "C" {
+          #endif
+
+          int sandbox_access_is_active(void);
+          int kexploit_opa334(void);
+          void* proc_self(void);
+          int sandbox_escape(void* proc);
+          id MCMActivateContainer(int a, id bundleID, bool c, id* error);
+          id MCMActivateContainerPath(id path);
+          bool openApplicationForBundleID(id bundleID);
+
+          #ifdef __cplusplus
+          }
+          #endif
+          #endif
+          EOF
+
+          # Tạo C Implementation
+          cat << 'EOF' > build_headers/CStubs.m
+          #include "CStubs.h"
+
+          int sandbox_access_is_active(void) { return 1; }
+          int kexploit_opa334(void) { return 0; }
+          void* proc_self(void) { return NULL; }
+          int sandbox_escape(void* proc) { return 0; }
+          id MCMActivateContainer(int a, id bundleID, bool c, id* error) { return nil; }
+          id MCMActivateContainerPath(id path) { return nil; }
+          bool openApplicationForBundleID(id bundleID) { return true; }
+          EOF
+
+          # Ghi đè vào Bridging Header
+          HEADER_FILE=$(find . -name "*Bridging-Header.h" | head -n 1)
+          if [ -n "$HEADER_FILE" ]; then
+            echo '#include "CStubs.h"' > "$HEADER_FILE"
+          fi
+
+          # Tạo file Localizable.strings ở tất cả các thư mục lproj
           find . -name "*.lproj" -type d | while read -r dir; do
             echo '/* Localizable */' > "$dir/Localizable.strings"
           done
 
-          # Tạo bổ sung các thư mục ngôn ngữ chuẩn nếu thiếu
-          for lang in en vi zh-Hans; do
-            mkdir -p "ThreeOneOSFive/${lang}.lproj"
-            mkdir -p "${lang}.lproj"
-            echo '/* Localizable */' > "ThreeOneOSFive/${lang}.lproj/Localizable.strings"
-            echo '/* Localizable */' > "${lang}.lproj/Localizable.strings"
-          done
-
-          # Xử lý Bridging Header
-          HEADER_FILE=$(find . -name "*Bridging-Header.h" | head -n 1)
-          if [ -n "$HEADER_FILE" ]; then
-            echo "// Empty Bridging Header" > "$HEADER_FILE"
-          fi
-
-          # Sửa file project .xcodeproj
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
           ruby -r xcodeproj -e "
             proj = Xcodeproj::Project.open('$PROJ_FILE')
             proj.recreate_user_schemes
-            
             proj.targets.each do |target|
               Xcodeproj::XCScheme.share_scheme(proj.path, target.name)
             end
@@ -81,8 +108,8 @@ jobs:
                      COMPILER_INDEX_STORE_ENABLE=NO \
                      USER_HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
                      HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
-                     OTHER_LDFLAGS="-Xlinker -undefined -Xlinker dynamic_lookup" \
-                     OTHER_CFLAGS="-w -Wno-everything -I$(pwd)/build_headers"
+                     OTHER_LDFLAGS="-Xlinker -undefined -Xlinker dynamic_lookup $(pwd)/build_headers/CStubs.m" \
+                     OTHER_CFLAGS="-w -Wno-everything -I$(pwd)/build_headers -include $(pwd)/build_headers/CStubs.h"
 
       - name: Create IPA Package
         run: |
