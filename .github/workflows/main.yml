@@ -13,7 +13,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Patch Missing Headers, Stubs & Language Files
+      - name: Patch Missing Headers, Stubs & Swift Fixes
         run: |
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
@@ -29,13 +29,28 @@ jobs:
           echo 'int fileport_makefd(fileport_t port);' >> "$INCLUDE_DIR/fileport.h"
           echo '#endif' >> "$INCLUDE_DIR/fileport.h"
 
-          # Tự động tạo thư mục + file Localizable.strings nếu thiếu bất kỳ ngôn ngữ nào
+          # Tự động tạo thư mục + file Localizable.strings nếu thiếu
           for lang in en vi zh-Hans; do
             mkdir -p "ThreeOneOSFive/${lang}.lproj"
             if [ ! -f "ThreeOneOSFive/${lang}.lproj/Localizable.strings" ]; then
               echo '/* Localizable Strings */' > "ThreeOneOSFive/${lang}.lproj/Localizable.strings"
             fi
           done
+
+          # Vá lỗi default trong Localization.swift
+          python3 -c '
+          path = "ThreeOneOSFive/helpers/Localization.swift"
+          try:
+              with open(path, "r") as f:
+                  code = f.read()
+              # Thay thế default bị lỗi break bằng return "en"
+              code = code.replace("default:\n    break", "default:\n    return \"en\"")
+              code = code.replace("default:\n\tbreak", "default:\n\treturn \"en\"")
+              with open(path, "w") as f:
+                  f.write(code)
+          except Exception as e:
+              print(e)
+          '
 
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
           ruby -r xcodeproj -e "
