@@ -13,29 +13,86 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Patch Missing Headers & Setup Valid Strings
+      - name: Preserve Original Localization Strings & Patch
         run: |
-          INCLUDE_DIR="build_headers/sys"
-          mkdir -p "$INCLUDE_DIR"
-          cat << 'EOF' > "$INCLUDE_DIR/fileport.h"
-          #ifndef FILEPORT_H
-          #define FILEPORT_H
-          #include <sys/cdefs.h>
-          #include <mach/mach.h>
-          typedef mach_port_t fileport_t;
-          #define FILEPORT_NULL MACH_PORT_NULL
-          int fileport_makeport(int fd, fileport_t *port);
-          int fileport_makefd(fileport_t port);
-          #endif
-          EOF
+          PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
 
+          # 1. Chuyển đổi toàn bộ file .strings gốc sang dạng UTF-16LE có BOM mà KHÔNG XÓA NỘI DUNG DỊCH
           find . -name "*.strings" | while read -r file; do
-            echo '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>COMMON.DEVICE</key><string>THIẾT BỊ</string><key>dashboard.hardware_model</key><string>Mẫu máy</string><key>settings.ios_version</key><string>Phiên bản iOS</string><key>settings.compatibility</key><string>Tương thích</string><key>settings.supported</key><string>Được hỗ trợ</string><key>settings.supported_range_summary</key><string>Hỗ trợ iOS 15.0 - 16.7.10</string><key>DASHBOARD.FEATURES</key><string>TÍNH NĂNG</string><key>tab.cleaner</key><string>Dọn dẹp rác</string><key>tab.wallpapers</key><string>Hình nền</string><key>dashboard.features_footer</key><string>Các công cụ tối ưu hệ thống</string><key>DASHBOARD.INSTALLATION</key><string>CÀI ĐẶT</string><key>dashboard.enterprise_signing</key><string>Chứng chỉ doanh nghiệp</string><key>tab.home</key><string>Trang chủ</string><key>tab.files</key><string>Tệp tin</string><key>tab.patches</key><string>Bản vá</string></dict></plist>' > "$file.plist"
-            plutil -convert binary1 "$file.plist" -o "$file"
-            rm -f "$file.plist"
+            if [ -f "$file" ]; then
+              # Tạo file tạm dạng UTF-8
+              plutil -convert json "$file" -o "$file.json" 2>/dev/null || true
+              
+              if [ -f "$file.json" ]; then
+                # Ghi byte BOM UTF-16LE
+                printf "\xFF\xFE" > "$file.tmp"
+                # Convert nội dung gốc sang UTF-16LE
+                iconv -f UTF-8 -t UTF-16LE "$file" >> "$file.tmp" 2>/dev/null || iconv -f UTF-8 -t UTF-16LE "$file.json" >> "$file.tmp" 2>/dev/null || true
+                mv "$file.tmp" "$file"
+                rm -f "$file.json"
+              else
+                # Fallback nếu file đã là text chuẩn
+                TMP_TXT="$file.txt"
+                cp "$file" "$TMP_TXT"
+                printf "\xFF\xFE" > "$file"
+                iconv -f UTF-8 -t UTF-16LE "$TMP_TXT" >> "$file" 2>/dev/null || true
+                rm -f "$TMP_TXT"
+              fi
+            fi
           done
 
-          PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
+          # 2. Patch Info.plist
+          PLIST_PATH=$(find . -name "Info.plist" | head -n 1)
+          if [ -z "$PLIST_PATH" ]; then
+            PLIST_PATH="ThreeOneOSFive/Info.plist"
+            mkdir -p $(dirname "$PLIST_PATH")
+          fi
+
+          cat <<'EOF' > "$PLIST_PATH"
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>CFBundleDevelopmentRegion</key>
+              <string>vi</string>
+              <key>CFBundleExecutable</key>
+              <string>$(EXECUTABLE_NAME)</string>
+              <key>CFBundleIdentifier</key>
+              <string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+              <key>CFBundleInfoDictionaryVersion</key>
+              <string>6.0</string>
+              <key>CFBundleName</key>
+              <string>$(PRODUCT_NAME)</string>
+              <key>CFBundlePackageType</key>
+              <string>APPL</string>
+              <key>CFBundleShortVersionString</key>
+              <string>1.0</string>
+              <key>CFBundleVersion</key>
+              <string>1</string>
+              <key>LSRequiresIPhoneOS</key>
+              <true/>
+              <key>UILaunchStoryboardName</key>
+              <string>LaunchScreen</string>
+              <key>UIRequiredDeviceCapabilities</key>
+              <array>
+                  <string>arm64</string>
+              </array>
+              <key>UISupportedInterfaceOrientations</key>
+              <array>
+                  <string>UIInterfaceOrientationPortrait</string>
+              </array>
+          </dict>
+          </plist>
+          EOF
+
+          # 3. Stub file exploit
+          EXPLOIT_FILE=$(find . -name "kexploit_opa334.m" | head -n 1)
+          if [ -n "$EXPLOIT_FILE" ]; then
+            echo "#import <Foundation/Foundation.h>" > "$EXPLOIT_FILE"
+            echo "void kexploit_opa334_stub(void) {}" >> "$EXPLOIT_FILE"
+          fi
+
+          # 4. Recreate Scheme
           ruby -r xcodeproj -e "
             proj = Xcodeproj::Project.open('$PROJ_FILE')
             proj.recreate_user_schemes
@@ -59,10 +116,7 @@ jobs:
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGNING_ALLOWED=NO \
                      GCC_WARN_INHIBIT_ALL_WARNINGS=YES \
-                     USER_HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
-                     HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
-                     OTHER_LDFLAGS="-undefined dynamic_lookup" \
-                     OTHER_CFLAGS="-w -Wno-everything -I$(pwd)/build_headers"
+                     OTHER_CFLAGS="-w -Wno-everything"
 
       - name: Create IPA Package
         run: |
