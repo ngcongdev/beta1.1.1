@@ -242,7 +242,7 @@
 "settings.sandbox_token" = "Token sandbox";
 "settings.generate_token" = "Tạo token";
 "settings.token_footer" = "Khả dụng sau khi exploit cấp quyền thành công.";
-"settings.credits" = "Ghi công";
+"settings.credits" = "Nhà phát triển & thiết kế";
 "settings.social_media" = "Mạng Xã Hội";
 "social.fantom_role" = "Cộng đồng fantom";
 "credit.yangjiii" = "Nhà phát triển & thiết kế";
