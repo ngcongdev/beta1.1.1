@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-14 
+    runs-on: macos-14
 
     steps:
       - name: Checkout code
@@ -29,7 +29,7 @@ jobs:
           echo 'int fileport_makefd(fileport_t port);' >> "$INCLUDE_DIR/fileport.h"
           echo '#endif' >> "$INCLUDE_DIR/fileport.h"
 
-          # Tạo C Header cho các hàm system missing
+          # Tạo C Header chuẩn hóa kiểu con trỏ void* cho Swift Bridging
           cat << 'EOF' > build_headers/CStubs.h
           #ifndef C_STUBS_H
           #define C_STUBS_H
@@ -43,8 +43,8 @@ jobs:
           int kexploit_opa334(void);
           void* proc_self(void);
           int sandbox_escape(void* proc);
-          id MCMActivateContainer(int a, id bundleID, bool c, id* error);
-          id MCMActivateContainerPath(id path);
+          id MCMActivateContainer(int a, id bundleID, bool c, void* error);
+          id MCMActivateContainerPath(id path, ...);
           bool openApplicationForBundleID(id bundleID);
 
           #ifdef __cplusplus
@@ -61,8 +61,8 @@ jobs:
           int kexploit_opa334(void) { return 0; }
           void* proc_self(void) { return NULL; }
           int sandbox_escape(void* proc) { return 0; }
-          id MCMActivateContainer(int a, id bundleID, bool c, id* error) { return nil; }
-          id MCMActivateContainerPath(id path) { return nil; }
+          id MCMActivateContainer(int a, id bundleID, bool c, void* error) { return nil; }
+          id MCMActivateContainerPath(id path, ...) { return nil; }
           bool openApplicationForBundleID(id bundleID) { return true; }
           EOF
 
