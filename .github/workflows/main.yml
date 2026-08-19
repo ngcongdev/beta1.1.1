@@ -13,61 +13,30 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Patch Missing Headers, Strings & Stubs
+      - name: Patch Missing Headers & Fix Strings
         run: |
+          # Patch header sys/fileport.h bị thiếu
+          SDK_PATH=$(xcrun --sdk iphoneos --show-sdk-path)
           INCLUDE_DIR="build_headers/sys"
           mkdir -p "$INCLUDE_DIR"
           
-          # Patch header fileport.h
-          echo '#ifndef FILEPORT_H' > "$INCLUDE_DIR/fileport.h"
-          echo '#define FILEPORT_H' >> "$INCLUDE_DIR/fileport.h"
-          echo '#include <sys/cdefs.h>' >> "$INCLUDE_DIR/fileport.h"
-          echo '#include <mach/mach.h>' >> "$INCLUDE_DIR/fileport.h"
-          echo 'typedef mach_port_t fileport_t;' >> "$INCLUDE_DIR/fileport.h"
-          echo '#define FILEPORT_NULL MACH_PORT_NULL' >> "$INCLUDE_DIR/fileport.h"
-          echo 'int fileport_makeport(int fd, fileport_t *port);' >> "$INCLUDE_DIR/fileport.h"
-          echo 'int fileport_makefd(fileport_t port);' >> "$INCLUDE_DIR/fileport.h"
-          echo '#endif' >> "$INCLUDE_DIR/fileport.h"
-
-          # Stub các symbol bị thiếu cho Linker
-          STUB_FILE="build_headers/stubs.c"
-          echo '#include <stdbool.h>' > "$STUB_FILE"
-          echo 'void early_kwrite32bytes(void) {}' >> "$STUB_FILE"
-          echo 'void early_kwrite64(void) {}' >> "$STUB_FILE"
-          echo 'bool kexploit_opa334(void) { return false; }' >> "$STUB_FILE"
-          echo 'void rwSocketPcb(void) {}' >> "$STUB_FILE"
-          echo 'void proc_self(void) {}' >> "$STUB_FILE"
-          echo 'void sandbox_escape(void) {}' >> "$STUB_FILE"
-
-          # Dùng Python tạo file strings chuẩn UTF-16LE kèm BOM để Xcode nhận diện 100%
-          python3 -c '
-          data = """
-          "COMMON.DEVICE" = "THIẾT BỊ";
-          "dashboard.hardware_model" = "Mẫu máy";
-          "settings.ios_version" = "Phiên bản iOS";
-          "settings.compatibility" = "Tương thích";
-          "settings.supported" = "Được hỗ trợ";
-          "settings.supported_range_summary" = "Hỗ trợ iOS 15.0 - 16.7.10";
-          "DASHBOARD.FEATURES" = "TÍNH NĂNG";
-          "tab.cleaner" = "Dọn dẹp rác";
-          "tab.wallpapers" = "Hình nền";
-          "dashboard.features_footer" = "Các công cụ tối ưu hệ thống";
-          "DASHBOARD.INSTALLATION" = "CÀI ĐẶT";
-          "dashboard.enterprise_signing" = "Chứng chỉ doanh nghiệp";
-          "tab.home" = "Trang chủ";
-          "tab.files" = "Tệp tin";
-          "tab.patches" = "Bản vá";
-          """
-          with open("/tmp/generated.strings", "w", encoding="utf-16") as f:
-              f.write(data)
-          '
-
-          # Bỏ qua file trong /tmp để không bị lặp cp
-          find . -name "*.strings" | while read -r file; do
-            cp /tmp/generated.strings "$file"
+          cat << 'EOF' > "$INCLUDE_DIR/fileport.h"
+          #ifndef FILEPORT_H
+          #define FILEPORT_H
+          #include <sys/cdefs.h>
+          #include <mach/mach.h>
+          typedef mach_port_t fileport_t;
+          #define FILEPORT_NULL MACH_PORT_NULL
+          int fileport_makeport(int fd, fileport_t *port);
+          int fileport_makefd(fileport_t port);
+          #endif
+          EOF
+          # Fix file .strings
+          find . -name "*.lproj" -type d | while read -r dir; do
+            STR_FILE="$dir/Localizable.strings"
+            printf "\xFF\xFE" > "$STR_FILE"
+            echo '/* Empty */' | iconv -f UTF-8 -t UTF-16LE >> "$STR_FILE"
           done
-          rm -f /tmp/generated.strings
-
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
           ruby -r xcodeproj -e "
             proj = Xcodeproj::Project.open('$PROJ_FILE')
@@ -77,12 +46,10 @@ jobs:
             end
             proj.save
           "
-
       - name: Build App
         run: |
           PROJ_FILE=$(find . -name "*.xcodeproj" | head -n 1)
           SCHEME=$(xcodebuild -list -project "$PROJ_FILE" | awk '/Schemes:/{flag=1;next}/Build Configurations:/{flag=0}flag' | xargs | awk '{print $1}')
-
           xcodebuild -project "$PROJ_FILE" \
                      -scheme "$SCHEME" \
                      -sdk iphoneos \
@@ -94,15 +61,12 @@ jobs:
                      GCC_WARN_INHIBIT_ALL_WARNINGS=YES \
                      USER_HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
                      HEADER_SEARCH_PATHS="$(pwd)/build_headers" \
-                     OTHER_LDFLAGS="-Wl,-undefined,dynamic_lookup" \
-                     OTHER_CFLAGS="-w -Wno-everything -I$(pwd)/build_headers $(pwd)/build_headers/stubs.c"
-
+                     OTHER_CFLAGS="-w -Wno-everything -I$(pwd)/build_headers"
       - name: Create IPA Package
         run: |
           mkdir -p Payload
           cp -r build/Build/Products/Release-iphoneos/*.app Payload/ 2>/dev/null || cp -r $(find build -name "*.app" | head -n 1) Payload/
           zip -r App.ipa Payload
-
       - name: Upload IPA Artifact
         uses: actions/upload-artifact@v4
         with:
