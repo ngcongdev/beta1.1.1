@@ -29,46 +29,8 @@ jobs:
           #endif
           EOF
 
-          # Ghi đè tất cả các file .strings bằng định dạng Binary Plist hợp lệ 100%
           find . -name "*.strings" | while read -r file; do
-            cat << 'EOF' > "$file.plist"
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>COMMON.DEVICE</key>
-              <string>THIẾT BỊ</string>
-              <key>dashboard.hardware_model</key>
-              <string>Mẫu máy</string>
-              <key>settings.ios_version</key>
-              <string>Phiên bản iOS</string>
-              <key>settings.compatibility</key>
-              <string>Tương thích</string>
-              <key>settings.supported</key>
-              <string>Được hỗ trợ</string>
-              <key>settings.supported_range_summary</key>
-              <string>Hỗ trợ iOS 15.0 - 16.7.10</string>
-              <key>DASHBOARD.FEATURES</key>
-              <string>TÍNH NĂNG</string>
-              <key>tab.cleaner</key>
-              <string>Dọn dẹp rác</string>
-              <key>tab.wallpapers</key>
-              <string>Hình nền</string>
-              <key>dashboard.features_footer</key>
-              <string>Các công cụ tối ưu hệ thống</string>
-              <key>DASHBOARD.INSTALLATION</key>
-              <string>CÀI ĐẶT</string>
-              <key>dashboard.enterprise_signing</key>
-              <string>Chứng chỉ doanh nghiệp</string>
-              <key>tab.home</key>
-              <string>Trang chủ</string>
-              <key>tab.files</key>
-              <string>Tệp tin</string>
-              <key>tab.patches</key>
-              <string>Bản vá</string>
-          </dict>
-          </plist>
-EOF
+            echo '<?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>COMMON.DEVICE</key><string>THIẾT BỊ</string><key>dashboard.hardware_model</key><string>Mẫu máy</string><key>settings.ios_version</key><string>Phiên bản iOS</string><key>settings.compatibility</key><string>Tương thích</string><key>settings.supported</key><string>Được hỗ trợ</string><key>settings.supported_range_summary</key><string>Hỗ trợ iOS 15.0 - 16.7.10</string><key>DASHBOARD.FEATURES</key><string>TÍNH NĂNG</string><key>tab.cleaner</key><string>Dọn dẹp rác</string><key>tab.wallpapers</key><string>Hình nền</string><key>dashboard.features_footer</key><string>Các công cụ tối ưu hệ thống</string><key>DASHBOARD.INSTALLATION</key><string>CÀI ĐẶT</string><key>dashboard.enterprise_signing</key><string>Chứng chỉ doanh nghiệp</string><key>tab.home</key><string>Trang chủ</string><key>tab.files</key><string>Tệp tin</string><key>tab.patches</key><string>Bản vá</string></dict></plist>' > "$file.plist"
             plutil -convert binary1 "$file.plist" -o "$file"
             rm -f "$file.plist"
           done
